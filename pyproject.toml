@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flea-camera"
+version = "0.1.0"
+description = "Python interface for legacy Point Grey / FLIR cameras using FlyCapture2"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Jason Doar" }]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8"]
+opencv = ["opencv-python>=4.8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flea"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["hardware: requires a connected FlyCapture2 camera"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
