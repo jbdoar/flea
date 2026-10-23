@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
 from .camera import Camera, list_cameras
+from .controls import TerminalControls, describe_properties
 from .recording import Recorder, RecordingFormat
 from .session import CaptureSession, QueuePolicy
 from .types import CameraPropertyInfo, PropertyType
@@ -99,13 +101,34 @@ def capture(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def properties(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="List all FlyCapture2 camera properties")
+    parser.add_argument("--camera", type=int, default=0, help="zero-based camera index")
+    args = parser.parse_args(argv)
+    with Camera(index=args.camera) as camera:
+        states = camera.list_properties()
+    for line in describe_properties(states):
+        print(line)
+    return 0
+
+
 def preview(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Preview a FlyCapture2 camera with OpenCV")
     parser.add_argument("--camera", type=int, default=0, help="zero-based camera index")
     parser.add_argument("--queue-size", type=int, default=2)
     parser.add_argument("--window-width", type=int, default=960)
     parser.add_argument("--window-height", type=int, default=720)
-    parser.add_argument("--no-controls", action="store_true")
+    parser.add_argument(
+        "--controls",
+        choices=("terminal", "gui", "none"),
+        default="terminal",
+        help="control interface (default: terminal)",
+    )
+    parser.add_argument(
+        "--no-controls",
+        action="store_true",
+        help="disable controls (deprecated alias for --controls none)",
+    )
     args = parser.parse_args(argv)
     if args.window_width < 1 or args.window_height < 1:
         parser.error("window dimensions must be positive")
@@ -117,18 +140,27 @@ def preview(argv: Sequence[str] | None = None) -> int:
     try:
         with Camera(index=args.camera) as camera:
             camera_info = camera.info
-            shutter = camera.get_property(PropertyType.SHUTTER)
-            shutter_info = camera.get_property_info(PropertyType.SHUTTER)
-            gain = camera.get_property(PropertyType.GAIN)
-            gain_info = camera.get_property_info(PropertyType.GAIN)
             window = camera_info.model
             cv2.namedWindow(window, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window, args.window_width, args.window_height)
             with CaptureSession(
                 camera, format="bgr", queue_size=args.queue_size, policy="latest"
             ) as session:
+                control_mode = "none" if args.no_controls else args.controls
                 controls: list[tuple[str, CameraPropertyInfo, bool]] = []
-                if not args.no_controls:
+                terminal_stop = threading.Event()
+                if control_mode == "terminal":
+                    terminal = TerminalControls(session, terminal_stop)
+                    threading.Thread(
+                        target=terminal.run,
+                        name="flea-terminal-controls",
+                        daemon=True,
+                    ).start()
+                if control_mode == "gui":
+                    shutter = session.get_property(PropertyType.SHUTTER)
+                    shutter_info = session.get_property_info(PropertyType.SHUTTER)
+                    gain = session.get_property(PropertyType.GAIN)
+                    gain_info = session.get_property_info(PropertyType.GAIN)
                     if shutter_info.present and shutter_info.absolute_supported:
                         controls.append(("Shutter", shutter_info, True))
                         shutter_ready = False
@@ -188,6 +220,8 @@ def preview(argv: Sequence[str] | None = None) -> int:
                         )
                         gain_ready = True
                 for frame in session:
+                    if terminal_stop.is_set():
+                        break
                     display = frame.data
                     y = 24
                     for name, property_info, logarithmic in controls:
@@ -210,6 +244,7 @@ def preview(argv: Sequence[str] | None = None) -> int:
                         y += 24
                     cv2.imshow(window, display)
                     if cv2.waitKey(1) & 0xFF in (27, ord("q")):
+                        terminal_stop.set()
                         break
     finally:
         cv2.destroyAllWindows()

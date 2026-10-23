@@ -150,6 +150,7 @@ class CameraProperty:
     type: PropertyType
     present: bool
     absolute: bool
+    one_push: bool
     auto: bool
     enabled: bool
     value_a: int
@@ -164,6 +165,7 @@ class CameraPropertyInfo:
     auto_supported: bool
     manual_supported: bool
     on_off_supported: bool
+    one_push_supported: bool
     absolute_supported: bool
     readable: bool
     minimum: int
@@ -172,6 +174,12 @@ class CameraPropertyInfo:
     absolute_maximum: float
     units: str
     unit_abbreviation: str
+
+
+@dataclass(frozen=True, slots=True)
+class CameraPropertyState:
+    info: CameraPropertyInfo
+    value: CameraProperty | None
 
 
 @dataclass(frozen=True, slots=True)

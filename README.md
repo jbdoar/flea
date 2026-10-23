@@ -149,6 +149,7 @@ frames.
 ```powershell
 flea-info
 flea-info --json
+flea-properties
 flea-preview
 flea-capture captures/run-001 --count 100 --file-format npy
 flea-capture captures/run-002 --count 100 --file-format png --output-format bgr
@@ -161,9 +162,38 @@ selected on the command line:
 flea-preview --window-width 1280 --window-height 800
 ```
 
-The preview includes live logarithmic shutter and linear gain sliders, plus
-automatic-mode toggles. Updates are coalesced and applied by the acquisition
-thread between frame grabs. Use `--no-controls` for an image-only preview.
+By default, the preview accepts live camera controls in the terminal where it
+was launched. Enter `list` to see every FlyCapture2 property, its current
+value, range, units, mode, and camera-reported capabilities:
+
+```text
+flea> list
+flea> get shutter
+flea> set shutter 5
+flea> set gain 3
+flea> auto shutter on
+flea> set white_balance 600 800
+flea> onepush white_balance
+flea> enable gamma on
+flea> quit
+```
+
+Property names include `brightness`, `auto_exposure`, `sharpness`,
+`white_balance`, `hue`, `saturation`, `gamma`, `iris`, `focus`, `zoom`, `pan`,
+`tilt`, `shutter`, `gain`, `trigger_mode`, `trigger_delay`, `frame_rate`, and
+`temperature`. Availability and supported modes depend on the camera.
+`exposure_time` is accepted as an alias for `shutter`, and `fps` as an alias
+for `frame_rate`. Use `flea-properties` to inspect these without starting the
+preview.
+
+The original shutter/gain sliders remain available with
+`flea-preview --controls gui`. Shutter is exposure time in milliseconds and
+uses a logarithmic slider; gain is in dB and uses a linear slider. The two
+`Auto` sliders toggle the corresponding automatic mode. Use `--controls none`
+or the backwards-compatible `--no-controls` for an image-only preview.
+
+Terminal and GUI updates are applied by the acquisition thread between frame
+grabs.
 
 Applications using a `CaptureSession` can safely make the same live changes:
 
@@ -172,6 +202,9 @@ from flea import PropertyType
 
 session.set_property(PropertyType.SHUTTER, 5.0, auto=False)  # milliseconds
 session.set_property(PropertyType.GAIN, 3.0, auto=False)     # dB
+
+for property_type, state in session.list_properties().items():
+    print(property_type.name, state)
 ```
 
 ## ROI and native pixel format

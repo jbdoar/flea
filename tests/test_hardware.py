@@ -135,6 +135,10 @@ def test_live_short_soak() -> None:
 
 def test_live_property_updates_during_capture() -> None:
     with Camera() as camera:
+        states = camera.list_properties()
+        assert set(states) == set(PropertyType)
+        assert states[PropertyType.SHUTTER].value is not None
+        assert states[PropertyType.GAIN].value is not None
         original_shutter = camera.get_property(PropertyType.SHUTTER)
         original_gain = camera.get_property(PropertyType.GAIN)
         shutter_info = camera.get_property_info(PropertyType.SHUTTER)
@@ -149,10 +153,14 @@ def test_live_property_updates_during_capture() -> None:
         )
         try:
             with CaptureSession(camera, format="bgr") as session:
-                session.set_property(
+                live_states = session.list_properties()
+                assert live_states[PropertyType.SHUTTER].value is not None
+                session.set_property_sync(
                     PropertyType.SHUTTER, shutter_target, absolute=True, auto=False
                 )
-                session.set_property(PropertyType.GAIN, gain_target, absolute=True, auto=False)
+                session.set_property_sync(
+                    PropertyType.GAIN, gain_target, absolute=True, auto=False
+                )
                 for _ in range(10):
                     session.get(timeout=2)
             updated_shutter = camera.get_property(PropertyType.SHUTTER)

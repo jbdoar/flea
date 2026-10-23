@@ -13,6 +13,7 @@ from .types import (
     CameraInfo,
     CameraProperty,
     CameraPropertyInfo,
+    CameraPropertyState,
     CameraRef,
     CaptureConfig,
     EmbeddedMetadataConfig,
@@ -250,6 +251,16 @@ class Camera:
         self._require_connected()
         return self._native.get_property_info(PropertyType(property_type))
 
+    def list_properties(self) -> dict[PropertyType, CameraPropertyState]:
+        """Return capabilities and current values for every FlyCapture2 property."""
+        self._require_connected()
+        states = {}
+        for property_type in PropertyType:
+            info = self.get_property_info(property_type)
+            value = self.get_property(property_type) if info.present and info.readable else None
+            states[property_type] = CameraPropertyState(info=info, value=value)
+        return states
+
     def set_property(
         self,
         property_type: PropertyType,
@@ -259,6 +270,7 @@ class Camera:
         auto: bool = False,
         enabled: bool = True,
         value_b: int | None = None,
+        one_push: bool | None = None,
     ) -> None:
         self._require_connected()
         self._native.set_property(
@@ -268,6 +280,7 @@ class Camera:
             auto=auto,
             enabled=enabled,
             value_b=value_b,
+            one_push=one_push,
         )
 
     def get_trigger(self) -> TriggerMode:

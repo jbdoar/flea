@@ -743,6 +743,7 @@ class NativeCamera:
             type=property_type,
             present=bool(prop.present),
             absolute=bool(prop.absControl),
+            one_push=bool(prop.onePush),
             auto=bool(prop.autoManualMode),
             enabled=bool(prop.onOff),
             value_a=prop.valueA,
@@ -762,6 +763,7 @@ class NativeCamera:
             auto_supported=bool(info.autoSupported),
             manual_supported=bool(info.manualSupported),
             on_off_supported=bool(info.onOffSupported),
+            one_push_supported=bool(info.onePushSupported),
             absolute_supported=bool(info.absValSupported),
             readable=bool(info.readOutSupported),
             minimum=info.min,
@@ -781,12 +783,15 @@ class NativeCamera:
         auto: bool,
         enabled: bool,
         value_b: int | None,
+        one_push: bool | None,
     ) -> None:
         prop = _Property(type=int(property_type))
         self._check("fc2GetProperty", self._dll.fc2GetProperty(self._context, ct.byref(prop)))
         prop.absControl = absolute
         prop.autoManualMode = auto
         prop.onOff = enabled
+        if one_push is not None:
+            prop.onePush = one_push
         if absolute:
             prop.absValue = float(value)
         else:

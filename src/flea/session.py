@@ -6,12 +6,31 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, TypeVar
 
 from .camera import Camera
 from .errors import CameraStateError, FlyCapture2Error
-from .types import CaptureConfig, Frame, GrabMode, PixelFormat, PropertyType
+from .types import (
+    CameraProperty,
+    CameraPropertyInfo,
+    CameraPropertyState,
+    CaptureConfig,
+    Frame,
+    GrabMode,
+    PixelFormat,
+    PropertyType,
+)
 
 _SDK_TIMEOUT = 18
+_T = TypeVar("_T")
+
+
+@dataclass(slots=True)
+class _ControlRequest:
+    function: Callable[[], Any]
+    complete: threading.Event
+    result: Any = None
+    error: BaseException | None = None
 
 
 class QueuePolicy(str, Enum):
@@ -83,8 +102,9 @@ class CaptureSession(Iterator[Frame]):
         self._lock = threading.Lock()
         self._property_lock = threading.Lock()
         self._pending_properties: dict[
-            PropertyType, tuple[float | int, bool, bool, bool, int | None]
+            PropertyType, tuple[float | int, bool, bool, bool, int | None, bool | None]
         ] = {}
+        self._control_requests: queue.Queue[_ControlRequest] = queue.Queue()
 
     @property
     def running(self) -> bool:
@@ -126,6 +146,7 @@ class CaptureSession(Iterator[Frame]):
     def _run(self) -> None:
         try:
             while not self._stop.is_set():
+                self._apply_control_requests()
                 self._apply_pending_properties()
                 try:
                     frame = self.camera.grab(format=self.format)
@@ -162,6 +183,7 @@ class CaptureSession(Iterator[Frame]):
         auto: bool = False,
         enabled: bool = True,
         value_b: int | None = None,
+        one_push: bool | None = None,
     ) -> None:
         """Queue a property write for the acquisition thread.
 
@@ -177,6 +199,7 @@ class CaptureSession(Iterator[Frame]):
                 auto,
                 enabled,
                 value_b,
+                one_push,
             )
 
     def _apply_pending_properties(self) -> None:
@@ -184,7 +207,7 @@ class CaptureSession(Iterator[Frame]):
             pending = self._pending_properties
             self._pending_properties = {}
         for property_type, values in pending.items():
-            value, absolute, auto, enabled, value_b = values
+            value, absolute, auto, enabled, value_b, one_push = values
             self.camera.set_property(
                 property_type,
                 value,
@@ -192,7 +215,73 @@ class CaptureSession(Iterator[Frame]):
                 auto=auto,
                 enabled=enabled,
                 value_b=value_b,
+                one_push=one_push,
             )
+
+    def _apply_control_requests(self) -> None:
+        while True:
+            try:
+                request = self._control_requests.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                request.result = request.function()
+            except BaseException as exc:
+                request.error = exc
+            finally:
+                request.complete.set()
+
+    def _invoke(self, function: Callable[[], _T], timeout: float = 3.0) -> _T:
+        if self._thread is None:
+            raise CameraStateError("CaptureSession has not been started")
+        request = _ControlRequest(function=function, complete=threading.Event())
+        self._control_requests.put(request)
+        deadline = time.monotonic() + timeout
+        while not request.complete.wait(0.05):
+            if self._error is not None:
+                raise CaptureSessionError("Background camera acquisition failed") from self._error
+            if not self.running:
+                raise CaptureSessionError("Capture session stopped before applying control")
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Timed out waiting for the camera control thread")
+        if request.error is not None:
+            raise request.error
+        return request.result
+
+    def get_property(self, property_type: PropertyType) -> CameraProperty:
+        property_type = PropertyType(property_type)
+        return self._invoke(lambda: self.camera.get_property(property_type))
+
+    def get_property_info(self, property_type: PropertyType) -> CameraPropertyInfo:
+        property_type = PropertyType(property_type)
+        return self._invoke(lambda: self.camera.get_property_info(property_type))
+
+    def list_properties(self) -> dict[PropertyType, CameraPropertyState]:
+        return self._invoke(self.camera.list_properties)
+
+    def set_property_sync(
+        self,
+        property_type: PropertyType,
+        value: float | int,
+        *,
+        absolute: bool = True,
+        auto: bool = False,
+        enabled: bool = True,
+        value_b: int | None = None,
+        one_push: bool | None = None,
+    ) -> None:
+        property_type = PropertyType(property_type)
+        self._invoke(
+            lambda: self.camera.set_property(
+                property_type,
+                value,
+                absolute=absolute,
+                auto=auto,
+                enabled=enabled,
+                value_b=value_b,
+                one_push=one_push,
+            )
+        )
 
     def _enqueue(self, frame: Frame) -> None:
         if self.policy is QueuePolicy.LATEST:

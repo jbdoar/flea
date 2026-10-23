@@ -130,6 +130,12 @@ def test_property_updates_are_coalesced_and_applied_by_worker() -> None:
         (
             PropertyType.SHUTTER,
             5.0,
-            {"absolute": True, "auto": False, "enabled": True, "value_b": None},
+            {
+                "absolute": True,
+                "auto": False,
+                "enabled": True,
+                "value_b": None,
+                "one_push": None,
+            },
         )
     ]

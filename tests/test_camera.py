@@ -106,6 +106,12 @@ def test_set_property_passes_explicit_modes() -> None:
         "set_property",
         PropertyType.SHUTTER,
         4.5,
-        {"absolute": True, "auto": False, "enabled": True, "value_b": None},
+        {
+            "absolute": True,
+            "auto": False,
+            "enabled": True,
+            "value_b": None,
+            "one_push": None,
+        },
     )
     camera.close()

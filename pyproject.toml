@@ -14,6 +14,7 @@ dependencies = ["numpy>=1.24"]
 
 [project.scripts]
 flea-info = "flea.cli:info"
+flea-properties = "flea.cli:properties"
 flea-capture = "flea.cli:capture"
 flea-preview = "flea.cli:preview"
 
