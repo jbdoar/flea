@@ -12,6 +12,11 @@ license = { file = "LICENSE" }
 authors = [{ name = "Jason Doar" }]
 dependencies = ["numpy>=1.24"]
 
+[project.scripts]
+flea-info = "flea.cli:info"
+flea-capture = "flea.cli:capture"
+flea-preview = "flea.cli:preview"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.8"]
 opencv = ["opencv-python>=4.8"]

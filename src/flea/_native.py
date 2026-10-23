@@ -253,7 +253,11 @@ def _library_candidates(path: str | os.PathLike[str] | None) -> list[Path | str]
         roots = [os.environ.get("ProgramW6432"), os.environ.get("ProgramFiles")]
         for root in filter(None, roots):
             candidates.append(
-                Path(root) / "Point Grey Research" / "FlyCapture2" / "bin64" / "FlyCapture2_C_v100.dll"
+                Path(root)
+                / "Point Grey Research"
+                / "FlyCapture2"
+                / "bin64"
+                / "FlyCapture2_C_v100.dll"
             )
         candidates.append("FlyCapture2_C_v100.dll")
     else:
@@ -373,7 +377,10 @@ class NativeCamera:
 
     def list_cameras(self) -> list[CameraRef]:
         count = ct.c_uint()
-        self._check("fc2GetNumOfCameras", self._dll.fc2GetNumOfCameras(self._context, ct.byref(count)))
+        self._check(
+            "fc2GetNumOfCameras",
+            self._dll.fc2GetNumOfCameras(self._context, ct.byref(count)),
+        )
         cameras = []
         for index in range(count.value):
             guid = _Guid()
@@ -476,7 +483,10 @@ class NativeCamera:
         )
         current_counter = native_metadata.embeddedFrameCounter
         dropped_frames = None
-        if self._last_embedded_counter is not None and current_counter != self._last_embedded_counter:
+        if (
+            self._last_embedded_counter is not None
+            and current_counter != self._last_embedded_counter
+        ):
             delta = (current_counter - self._last_embedded_counter) & 0xFFFFFFFF
             dropped_frames = max(0, delta - 1)
         self._last_embedded_counter = current_counter

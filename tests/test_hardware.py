@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from flea import Camera, GrabMode, PixelFormat
+from flea import Camera, CaptureSession, GrabMode, PixelFormat, Recorder
 
 pytestmark = [
     pytest.mark.hardware,
@@ -91,3 +91,43 @@ def test_live_conversion_metadata_configuration_and_format7() -> None:
                 grab_mode=original_capture.grab_mode,
                 high_performance=original_capture.high_performance,
             )
+
+
+def test_live_background_capture_session_and_recording(tmp_path) -> None:
+    with Camera() as camera:
+        original = camera.get_capture_config()
+        with CaptureSession(
+            camera,
+            format="bgr",
+            queue_size=8,
+            policy="lossless",
+            grab_timeout_ms=1_000,
+        ) as session:
+            frames = [session.get(timeout=2) for _ in range(30)]
+            stats = session.stats()
+
+        assert len(frames) == 30
+        assert all(frame.data.shape == (frame.height, frame.width, 3) for frame in frames)
+        assert stats.frames_delivered == 30
+        assert stats.frames_dropped == 0
+        assert camera.get_capture_config() == original
+
+        with CaptureSession(camera, format="bgr", policy="lossless") as session:
+            with Recorder(tmp_path / "live-recording", format="png") as recorder:
+                recorder.record(session, count=3)
+        assert recorder.frames_written == 3
+        assert len(list(recorder.destination.glob("frame_*.png"))) == 3
+
+
+def test_live_short_soak() -> None:
+    frame_count = int(os.environ.get("FLEA_SOAK_FRAMES", "300"))
+    with Camera() as camera:
+        with CaptureSession(
+            camera, format="bgr", queue_size=16, policy="lossless"
+        ) as session:
+            for _ in range(frame_count):
+                session.get(timeout=2)
+            stats = session.stats()
+    assert stats.frames_delivered == frame_count
+    assert stats.frames_dropped == 0
+    assert stats.acquisition_fps > 20

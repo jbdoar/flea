@@ -95,6 +95,65 @@ Use `GrabMode.LATEST` for low-latency display and `GrabMode.BUFFERED` when every
 frame matters. A finite timeout prevents a disconnected or stalled camera from
 blocking forever.
 
+For processing that may be slower than the camera, use a background session:
+
+```python
+from flea import Camera, CaptureSession
+
+with Camera() as camera:
+    with CaptureSession(
+        camera,
+        format="bgr",
+        queue_size=16,
+        policy="latest",  # or "lossless"
+    ) as session:
+        for frame in session:
+            process(frame.data)
+
+        print(session.stats())
+```
+
+`latest` discards the oldest queued frame to minimize latency. `lossless`
+applies FlyCapture2's buffered grab mode and back-pressures acquisition when
+the Python queue is full. The session temporarily applies a finite SDK timeout
+so shutdown cannot hang, and restores the original camera configuration when
+it closes. Worker failures are re-raised in the consuming thread.
+`CaptureStats` reports acquisition FPS, queue depth and drops, SDK timeouts,
+and current/mean capture-to-consumer latency.
+
+Downstream libraries can type against the small `FrameSource` protocol instead
+of depending on FlyCapture2-specific configuration APIs.
+
+## Recording datasets
+
+Recordings are written to a temporary sibling directory and atomically renamed
+only after successful completion. Each dataset contains numbered images,
+`frames.jsonl` with per-frame metadata, and a `manifest.json`. Interrupted
+recordings retain their `.partial-*` directory for recovery.
+
+```python
+from flea import Camera, CaptureSession, Recorder
+
+with Camera() as camera:
+    with CaptureSession(camera, format="bgr", policy="lossless") as session:
+        with Recorder("captures/run-001", format="png") as recorder:
+            recorder.record(session, count=100)
+```
+
+`npy` works with the core NumPy dependency and preserves any frame layout.
+`png` and `tiff` require the OpenCV extra and expect BGR, RGB, or grayscale
+frames.
+
+## Commands
+
+```powershell
+flea-info
+flea-info --json
+flea-preview
+flea-capture captures/run-001 --count 100 --file-format npy
+flea-capture captures/run-002 --count 100 --file-format png --output-format bgr
+```
+
 ## ROI and native pixel format
 
 Flea cameras expose custom image settings through FlyCapture2 Format7:
