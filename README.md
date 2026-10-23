@@ -171,6 +171,8 @@ flea> list
 flea> get shutter
 flea> set shutter 5
 flea> set gain 3
+flea> set gamma 1.332
+flea> setraw gamma 1332
 flea> auto shutter on
 flea> set white_balance 600 800
 flea> onepush white_balance
@@ -184,7 +186,11 @@ Property names include `brightness`, `auto_exposure`, `sharpness`,
 `temperature`. Availability and supported modes depend on the camera.
 `exposure_time` is accepted as an alias for `shutter`, and `fps` as an alias
 for `frame_rate`. Use `flea-properties` to inspect these without starting the
-preview.
+preview. `set` uses the displayed absolute units whenever the camera supports
+them; `setraw` writes the camera's integer register value. Out-of-range values
+are rejected rather than silently clamped by FlyCapture2. Use
+`enable PROPERTY off` to turn a property off rather than setting its value to
+zero.
 
 The original shutter/gain sliders remain available with
 `flea-preview --controls gui`. Shutter is exposure time in milliseconds and

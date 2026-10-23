@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import shlex
 import threading
 from collections.abc import Callable
@@ -38,20 +39,23 @@ def describe_property(property_type: PropertyType, state: CameraPropertyState) -
         current = "write-only"
     elif state.value.absolute:
         unit = info.unit_abbreviation or info.units
-        current = f"{state.value.value:.6g} {unit}".rstrip()
+        current = f"absolute={state.value.value:.6g} {unit}".rstrip()
     elif property_type is PropertyType.WHITE_BALANCE:
-        current = f"red={state.value.value_a} blue={state.value.value_b}"
+        current = f"raw red={state.value.value_a} blue={state.value.value_b}"
     else:
-        current = str(state.value.value_a)
+        current = f"raw={state.value.value_a}"
     modes = []
     if state.value is not None:
         modes.append("auto" if state.value.auto else "manual")
         modes.append("on" if state.value.enabled else "off")
     if info.absolute_supported:
         unit = info.unit_abbreviation or info.units
-        limits = f"range={info.absolute_minimum:g}..{info.absolute_maximum:g} {unit}".rstrip()
+        absolute_limits = (
+            f"abs-range={info.absolute_minimum:g}..{info.absolute_maximum:g} {unit}"
+        ).rstrip()
+        limits = f"{absolute_limits} raw-range={info.minimum}..{info.maximum}"
     else:
-        limits = f"range={info.minimum}..{info.maximum}"
+        limits = f"raw-range={info.minimum}..{info.maximum}"
     capabilities = []
     if info.auto_supported:
         capabilities.append("auto")
@@ -81,13 +85,14 @@ class TerminalControls:
             "Camera controls:",
             "  list",
             "  get PROPERTY",
-            "  set PROPERTY VALUE [VALUE_B]",
+            "  set PROPERTY VALUE [VALUE_B]       # absolute units when available",
+            "  setraw PROPERTY VALUE [VALUE_B]    # camera register value",
             "  auto PROPERTY on|off",
             "  enable PROPERTY on|off",
             "  onepush PROPERTY",
             "  help",
             "  quit",
-            "Examples: set shutter 5 | set gain 3 | set white_balance 600 800",
+            "Examples: set shutter 5 | set gamma 1.332 | setraw gamma 1332",
         ]
 
     def run(
@@ -128,13 +133,20 @@ class TerminalControls:
             property_type = resolve_property(parts[1])
             state = self.session.list_properties()[property_type]
             return [describe_property(property_type, state)]
-        if action == "set" and len(parts) in (3, 4):
+        if action in ("set", "setraw") and len(parts) in (3, 4):
             property_type = resolve_property(parts[1])
             state = self.session.list_properties()[property_type]
             self._require_manual(state)
+            if len(parts) == 4 and property_type is not PropertyType.WHITE_BALANCE:
+                raise ValueError("A second value is only valid for white_balance")
             value_b = int(parts[3]) if len(parts) == 4 else None
-            absolute = state.info.absolute_supported and value_b is None
+            absolute = (
+                action == "set"
+                and state.info.absolute_supported
+                and value_b is None
+            )
             value: float | int = float(parts[2]) if absolute else int(parts[2])
+            self._validate_value(parts[1], state, value, value_b, absolute=absolute)
             self.session.set_property_sync(
                 property_type,
                 value,
@@ -195,3 +207,33 @@ class TerminalControls:
         if normalized in ("off", "false", "0", "no"):
             return False
         raise ValueError("Expected on or off")
+
+    @staticmethod
+    def _validate_value(
+        name: str,
+        state: CameraPropertyState,
+        value: float | int,
+        value_b: int | None,
+        *,
+        absolute: bool,
+    ) -> None:
+        info = state.info
+        if absolute:
+            numeric = float(value)
+            minimum = info.absolute_minimum
+            maximum = info.absolute_maximum
+            if not math.isfinite(numeric) or not minimum <= numeric <= maximum:
+                unit = info.unit_abbreviation or info.units
+                suffix = f" {unit}" if unit else ""
+                raise ValueError(
+                    f"{name} must be between {minimum:g} and {maximum:g}{suffix} "
+                    f"in absolute mode; use 'enable {name} off' to disable it or "
+                    f"'setraw {name} VALUE' for a raw register value"
+                )
+            return
+        if info.minimum <= info.maximum:
+            values = (int(value),) if value_b is None else (int(value), value_b)
+            if any(raw < info.minimum or raw > info.maximum for raw in values):
+                raise ValueError(
+                    f"{name} raw value must be between {info.minimum} and {info.maximum}"
+                )

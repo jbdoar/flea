@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from flea import CameraProperty, CameraPropertyInfo, CameraPropertyState, PropertyType
 from flea.controls import TerminalControls, resolve_property
 
@@ -105,3 +107,19 @@ def test_terminal_integer_pair_and_quit_commands() -> None:
     assert session.writes[-1][2]["value_b"] == 800
     assert controls.execute("quit") == ["stopping preview"]
     assert stop.is_set()
+
+
+def test_terminal_distinguishes_absolute_and_raw_values() -> None:
+    session = FakeSession()
+    controls = TerminalControls(session, threading.Event())
+
+    for invalid in ("set gamma 0", "set gamma 1332"):
+        with pytest.raises(ValueError, match="absolute mode"):
+            controls.execute(invalid)
+
+    result = controls.execute("setraw gamma 900")
+    assert "raw=900" in result[0]
+    assert "abs-range=" in result[0]
+    assert "raw-range=" in result[0]
+    assert session.writes[-1][1] == 900
+    assert session.writes[-1][2]["absolute"] is False
