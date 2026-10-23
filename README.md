@@ -154,6 +154,26 @@ flea-capture captures/run-001 --count 100 --file-format npy
 flea-capture captures/run-002 --count 100 --file-format png --output-format bgr
 ```
 
+The preview window is resizable by dragging its edges. Its default size can be
+selected on the command line:
+
+```powershell
+flea-preview --window-width 1280 --window-height 800
+```
+
+The preview includes live logarithmic shutter and linear gain sliders, plus
+automatic-mode toggles. Updates are coalesced and applied by the acquisition
+thread between frame grabs. Use `--no-controls` for an image-only preview.
+
+Applications using a `CaptureSession` can safely make the same live changes:
+
+```python
+from flea import PropertyType
+
+session.set_property(PropertyType.SHUTTER, 5.0, auto=False)  # milliseconds
+session.set_property(PropertyType.GAIN, 3.0, auto=False)     # dB
+```
+
 ## ROI and native pixel format
 
 Flea cameras expose custom image settings through FlyCapture2 Format7:

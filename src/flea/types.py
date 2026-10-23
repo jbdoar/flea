@@ -158,6 +158,23 @@ class CameraProperty:
 
 
 @dataclass(frozen=True, slots=True)
+class CameraPropertyInfo:
+    type: PropertyType
+    present: bool
+    auto_supported: bool
+    manual_supported: bool
+    on_off_supported: bool
+    absolute_supported: bool
+    readable: bool
+    minimum: int
+    maximum: int
+    absolute_minimum: float
+    absolute_maximum: float
+    units: str
+    unit_abbreviation: str
+
+
+@dataclass(frozen=True, slots=True)
 class TriggerMode:
     enabled: bool
     polarity: int

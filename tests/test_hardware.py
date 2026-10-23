@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from flea import Camera, CaptureSession, GrabMode, PixelFormat, Recorder
+from flea import Camera, CaptureSession, GrabMode, PixelFormat, PropertyType, Recorder
 
 pytestmark = [
     pytest.mark.hardware,
@@ -131,3 +131,50 @@ def test_live_short_soak() -> None:
     assert stats.frames_delivered == frame_count
     assert stats.frames_dropped == 0
     assert stats.acquisition_fps > 20
+
+
+def test_live_property_updates_during_capture() -> None:
+    with Camera() as camera:
+        original_shutter = camera.get_property(PropertyType.SHUTTER)
+        original_gain = camera.get_property(PropertyType.GAIN)
+        shutter_info = camera.get_property_info(PropertyType.SHUTTER)
+        gain_info = camera.get_property_info(PropertyType.GAIN)
+        shutter_target = min(
+            shutter_info.absolute_maximum,
+            max(shutter_info.absolute_minimum, original_shutter.value * 0.9),
+        )
+        gain_target = min(
+            gain_info.absolute_maximum,
+            max(gain_info.absolute_minimum, original_gain.value + 0.5),
+        )
+        try:
+            with CaptureSession(camera, format="bgr") as session:
+                session.set_property(
+                    PropertyType.SHUTTER, shutter_target, absolute=True, auto=False
+                )
+                session.set_property(PropertyType.GAIN, gain_target, absolute=True, auto=False)
+                for _ in range(10):
+                    session.get(timeout=2)
+            updated_shutter = camera.get_property(PropertyType.SHUTTER)
+            updated_gain = camera.get_property(PropertyType.GAIN)
+            assert not updated_shutter.auto
+            assert not updated_gain.auto
+            assert updated_shutter.value == pytest.approx(shutter_target, rel=0.1)
+            assert updated_gain.value == pytest.approx(gain_target, abs=0.2)
+        finally:
+            camera.set_property(
+                PropertyType.SHUTTER,
+                original_shutter.value if original_shutter.absolute else original_shutter.value_a,
+                absolute=original_shutter.absolute,
+                auto=original_shutter.auto,
+                enabled=original_shutter.enabled,
+                value_b=original_shutter.value_b,
+            )
+            camera.set_property(
+                PropertyType.GAIN,
+                original_gain.value if original_gain.absolute else original_gain.value_a,
+                absolute=original_gain.absolute,
+                auto=original_gain.auto,
+                enabled=original_gain.enabled,
+                value_b=original_gain.value_b,
+            )

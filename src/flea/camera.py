@@ -12,6 +12,7 @@ from .errors import CameraStateError
 from .types import (
     CameraInfo,
     CameraProperty,
+    CameraPropertyInfo,
     CameraRef,
     CaptureConfig,
     EmbeddedMetadataConfig,
@@ -244,6 +245,10 @@ class Camera:
     def get_property(self, property_type: PropertyType) -> CameraProperty:
         self._require_connected()
         return self._native.get_property(PropertyType(property_type))
+
+    def get_property_info(self, property_type: PropertyType) -> CameraPropertyInfo:
+        self._require_connected()
+        return self._native.get_property_info(PropertyType(property_type))
 
     def set_property(
         self,

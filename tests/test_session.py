@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 import time
 
 import numpy as np
@@ -16,6 +15,7 @@ from flea import (
     GrabMode,
     ImageMetadata,
     PixelFormat,
+    PropertyType,
     QueuePolicy,
 )
 
@@ -44,6 +44,7 @@ class FakeCamera:
         self.fail_after = fail_after
         self.sequence = 0
         self.config = CaptureConfig(10, -1, GrabMode.LATEST, False)
+        self.property_writes: list[tuple[object, ...]] = []
 
     def get_capture_config(self) -> CaptureConfig:
         return self.config
@@ -73,6 +74,9 @@ class FakeCamera:
         if self.fail_after is not None and self.sequence > self.fail_after:
             raise RuntimeError("camera failed")
         return make_frame(self.sequence)
+
+    def set_property(self, property_type: object, value: object, **options: object) -> None:
+        self.property_writes.append((property_type, value, options))
 
 
 def test_session_streams_and_restores_camera_configuration() -> None:
@@ -113,3 +117,19 @@ def test_session_rejects_camera_that_is_already_capturing() -> None:
     with pytest.raises(CameraStateError, match="stopped"):
         CaptureSession(camera).start()
 
+
+def test_property_updates_are_coalesced_and_applied_by_worker() -> None:
+    camera = FakeCamera(delay=0.001)
+    with CaptureSession(camera) as session:
+        session.set_property(PropertyType.SHUTTER, 4.0)
+        session.set_property(PropertyType.SHUTTER, 5.0)
+        deadline = time.monotonic() + 1
+        while not camera.property_writes and time.monotonic() < deadline:
+            time.sleep(0.001)
+    assert camera.property_writes == [
+        (
+            PropertyType.SHUTTER,
+            5.0,
+            {"absolute": True, "auto": False, "enabled": True, "value_b": None},
+        )
+    ]

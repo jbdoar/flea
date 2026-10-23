@@ -12,6 +12,7 @@ from .errors import FlyCapture2Error, FlyCapture2NotFoundError
 from .types import (
     CameraInfo,
     CameraProperty,
+    CameraPropertyInfo,
     CameraRef,
     CaptureConfig,
     EmbeddedMetadataConfig,
@@ -120,6 +121,26 @@ class _Property(ct.Structure):
         ("valueA", ct.c_uint),
         ("valueB", ct.c_uint),
         ("absValue", ct.c_float),
+        ("reserved", ct.c_uint * 8),
+    ]
+
+
+class _PropertyInfo(ct.Structure):
+    _fields_ = [
+        ("type", ct.c_int),
+        ("present", ct.c_int),
+        ("autoSupported", ct.c_int),
+        ("manualSupported", ct.c_int),
+        ("onOffSupported", ct.c_int),
+        ("onePushSupported", ct.c_int),
+        ("absValSupported", ct.c_int),
+        ("readOutSupported", ct.c_int),
+        ("min", ct.c_uint),
+        ("max", ct.c_uint),
+        ("absMin", ct.c_float),
+        ("absMax", ct.c_float),
+        ("pUnits", ct.c_char * _MAX_STRING_LENGTH),
+        ("pUnitAbbr", ct.c_char * _MAX_STRING_LENGTH),
         ("reserved", ct.c_uint * 8),
     ]
 
@@ -357,6 +378,10 @@ class NativeCamera:
                 ct.c_int,
             ),
             "fc2GetProperty": ([ct.c_void_p, ct.POINTER(_Property)], ct.c_int),
+            "fc2GetPropertyInfo": (
+                [ct.c_void_p, ct.POINTER(_PropertyInfo)],
+                ct.c_int,
+            ),
             "fc2SetProperty": ([ct.c_void_p, ct.POINTER(_Property)], ct.c_int),
             "fc2GetTriggerMode": ([ct.c_void_p, ct.POINTER(_TriggerMode)], ct.c_int),
             "fc2SetTriggerMode": ([ct.c_void_p, ct.POINTER(_TriggerMode)], ct.c_int),
@@ -723,6 +748,28 @@ class NativeCamera:
             value_a=prop.valueA,
             value_b=prop.valueB,
             value=prop.absValue,
+        )
+
+    def get_property_info(self, property_type: PropertyType) -> CameraPropertyInfo:
+        info = _PropertyInfo(type=int(property_type))
+        self._check(
+            "fc2GetPropertyInfo",
+            self._dll.fc2GetPropertyInfo(self._context, ct.byref(info)),
+        )
+        return CameraPropertyInfo(
+            type=property_type,
+            present=bool(info.present),
+            auto_supported=bool(info.autoSupported),
+            manual_supported=bool(info.manualSupported),
+            on_off_supported=bool(info.onOffSupported),
+            absolute_supported=bool(info.absValSupported),
+            readable=bool(info.readOutSupported),
+            minimum=info.min,
+            maximum=info.max,
+            absolute_minimum=info.absMin,
+            absolute_maximum=info.absMax,
+            units=_decode(info.pUnits),
+            unit_abbreviation=_decode(info.pUnitAbbr),
         )
 
     def set_property(

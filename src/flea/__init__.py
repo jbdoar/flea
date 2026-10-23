@@ -6,6 +6,7 @@ from .protocols import FrameSource
 from .types import (
     CameraInfo,
     CameraProperty,
+    CameraPropertyInfo,
     CameraRef,
     CaptureConfig,
     EmbeddedMetadataConfig,
@@ -24,6 +25,7 @@ __all__ = [
     "Camera",
     "CameraInfo",
     "CameraProperty",
+    "CameraPropertyInfo",
     "CameraRef",
     "CameraStateError",
     "CaptureSession",

@@ -10,6 +10,7 @@ from flea._native import (
     _Image,
     _ImageMetadata,
     _Property,
+    _PropertyInfo,
     _TimeStamp,
     _TriggerMode,
 )
@@ -19,6 +20,7 @@ from flea.types import PixelFormat
 def test_core_structure_sizes_match_flycapture2_64_bit_abi() -> None:
     assert ct.sizeof(_Image) == 48
     assert ct.sizeof(_Property) == 68
+    assert ct.sizeof(_PropertyInfo) == 1104
     assert ct.sizeof(_TriggerMode) == 52
     assert ct.sizeof(_TimeStamp) == 56
     assert ct.sizeof(_ImageMetadata) == 164

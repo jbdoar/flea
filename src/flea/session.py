@@ -9,7 +9,7 @@ from enum import Enum
 
 from .camera import Camera
 from .errors import CameraStateError, FlyCapture2Error
-from .types import CaptureConfig, Frame, GrabMode, PixelFormat
+from .types import CaptureConfig, Frame, GrabMode, PixelFormat, PropertyType
 
 _SDK_TIMEOUT = 18
 
@@ -81,6 +81,10 @@ class CaptureSession(Iterator[Frame]):
         self._latency_total_ms = 0.0
         self._latency_samples = 0
         self._lock = threading.Lock()
+        self._property_lock = threading.Lock()
+        self._pending_properties: dict[
+            PropertyType, tuple[float | int, bool, bool, bool, int | None]
+        ] = {}
 
     @property
     def running(self) -> bool:
@@ -122,6 +126,7 @@ class CaptureSession(Iterator[Frame]):
     def _run(self) -> None:
         try:
             while not self._stop.is_set():
+                self._apply_pending_properties()
                 try:
                     frame = self.camera.grab(format=self.format)
                 except FlyCapture2Error as exc:
@@ -147,6 +152,47 @@ class CaptureSession(Iterator[Frame]):
             self._stop.set()
         finally:
             self._stopped_at = time.perf_counter()
+
+    def set_property(
+        self,
+        property_type: PropertyType,
+        value: float | int,
+        *,
+        absolute: bool = True,
+        auto: bool = False,
+        enabled: bool = True,
+        value_b: int | None = None,
+    ) -> None:
+        """Queue a property write for the acquisition thread.
+
+        Repeated updates to the same property are coalesced so a responsive UI
+        cannot build an unbounded command backlog.
+        """
+        if self._thread is None:
+            raise CameraStateError("CaptureSession has not been started")
+        with self._property_lock:
+            self._pending_properties[PropertyType(property_type)] = (
+                value,
+                absolute,
+                auto,
+                enabled,
+                value_b,
+            )
+
+    def _apply_pending_properties(self) -> None:
+        with self._property_lock:
+            pending = self._pending_properties
+            self._pending_properties = {}
+        for property_type, values in pending.items():
+            value, absolute, auto, enabled, value_b = values
+            self.camera.set_property(
+                property_type,
+                value,
+                absolute=absolute,
+                auto=auto,
+                enabled=enabled,
+                value_b=value_b,
+            )
 
     def _enqueue(self, frame: Frame) -> None:
         if self.policy is QueuePolicy.LATEST:
